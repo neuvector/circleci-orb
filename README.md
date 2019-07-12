@@ -18,7 +18,7 @@ Currently support scanning public registry images with a running NeuVector Allin
 
 ```
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@x.y.z
 ```
 
 Add neuvector/scan-image with parameters to your current workflow.
