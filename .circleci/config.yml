@@ -1,0 +1,14 @@
+version: 2.1
+orbs:
+  neuvector: neuvector/neuvector-orb@1.0.0
+workflows:
+  scan-image:
+    jobs:
+      - neuvector/scan-image:
+          context: myContext
+          registry_url: https://registry.hub.docker.com
+          repository: alpine
+          tag: "3.4"
+          scan_layers: false
+          high_vul_to_fail: 0
+          medium_vul_to_fail: 3

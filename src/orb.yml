@@ -1,0 +1,203 @@
+version: 2.1
+description: |
+  This orb is for NeuVector vulnerability scanning.
+examples:
+  image-scan:
+    description: Scan a image
+    usage:
+      version: 2.1
+      orbs:
+        neuvector: neuvector/neuvector-orb@1.0.0
+      workflows:
+        scan-image:
+          jobs:
+            - neuvector/scan-image:
+                context: myContext
+                registry_url: https://registry.hub.docker.com
+                repository: alpine
+                tag: "3.4"
+                scan_layers: false
+                high_vul_to_fail: 0
+                medium_vul_to_fail: 3
+executors:
+  default:
+    machine: true
+commands:
+  scan:
+    description: Scan the container image
+    parameters:
+      controller_ip:
+        description: The IP address of the Controller or Allinone host or service external ip
+        type: string
+        default: $controller_ip
+      controller_port:
+        description: The port for REST API
+        type: string
+        default: $controller_port
+      controller_username:
+        description: Username for a NeuVector admin
+        type: string
+        default: $controller_username
+      controller_password:
+        description: Password for a NeuVector admin
+        type: string
+        default: $controller_password
+      registry_url:
+        description: The registry URL full path
+        type: string
+      registry_username:
+        description: The registry Username
+        type: string
+        default: ''
+      registry_password:
+        description: The registry password
+        type: string
+        default: ''
+      repository:
+        description: The repository to scan
+        type: string
+      tag:
+        description: Tag of the repository to scan
+        type: string
+      scan_layers:
+        description: Scan layer
+        type: boolean
+        default: false
+    steps:
+      - run:
+          name: Scan Image
+          command: |
+            mkdir nvtemp
+            mkdir nvreport
+            curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -d '{"password": {"username": "'<<parameters.controller_username>>'", "password": "'<<parameters.controller_password>>'"}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/auth" > ./nvtemp/tokenResponse
+            HTTP_STATUS=$(cat ./nvtemp/tokenResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+            if [ "$HTTP_STATUS" == "200" ]; then
+              cat ./nvtemp/tokenResponse | sed -e 's/HTTPSTATUS\:.*//g' > ./nvtemp/token.json
+            elif [ "$HTTP_STATUS" == "401" -o "$HTTP_STATUS" == "404" -o "$HTTP_STATUS" == "405" ]; then
+              echo Invalid credential of NeuVector controller.
+              exit 1
+            else
+              echo Failed to get token. Http status code: $HTTP_STATUS.
+              exit 1
+            fi
+            curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": {"registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
+            HTTP_STATUS=$(cat ./nvtemp/scanResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+            while [ "$HTTP_STATUS" == "304" ]; do
+              curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": {"registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
+              HTTP_STATUS=$(cat ./nvtemp/scanResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+            done
+            if [ "$HTTP_STATUS" == "200" ]; then
+              cat ./nvtemp/scanResponse | sed -e 's/HTTPSTATUS\:.*//g' > ./nvreport/scan_repository.json
+              echo Scan successfully.
+            else
+              echo Scan failed. Http status code: $HTTP_STATUS.
+              exit 1
+            fi
+            curl -k -X "DELETE" -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/auth"
+  report:
+    description: Print the report
+    steps:
+      - run:
+          name: Short report
+          command: |
+            VUL_NUM=$(cat ./nvreport/scan_repository.json | jq '.report.vulnerabilities | length')
+            if [ "$VUL_NUM" -eq 0 ]; then
+              echo No vulnerabilities found.
+            else
+              echo Total number of vulnerabilities: $VUL_NUM, grouped by package name with vulnerability name.
+              jq '[.report.vulnerabilities | group_by(.package_name) | .[] | {package_name: .[0].package_name, vuln_name: [.[].name]}]' ./nvreport/scan_repository.json
+            fi
+      - run:
+          name: Full report
+          command: |
+            echo Full report in json.
+            cat ./nvreport/scan_repository.json | jq .
+  checkpoint:
+    description: Pass or fail based on criteria
+    parameters:
+      high_vul_to_fail:
+        description: Minimum number of high vulnerabilities to fail the build
+        type: integer
+        default: 0
+      medium_vul_to_fail:
+        description: Minimum number of medium vulnerabilities to fail the build
+        type: integer
+        default: 0
+    steps:
+      - run:
+          name: Check criteria
+          command: |
+            FOUND_HIGH=$(cat ./nvreport/scan_repository.json | jq '.report.vulnerabilities[] | select(.severity == "High") | .severity' | wc -l)
+            FOUND_MEDIUM=$(cat ./nvreport/scan_repository.json | jq '.report.vulnerabilities[] | select(.severity == "Medium") | .severity' | wc -l)
+            echo Criteria high_vul_to_fail: <<parameters.high_vul_to_fail>>, medium_vul_to_fail: <<parameters.medium_vul_to_fail>>.
+            echo Found high vulnerabilities: $FOUND_HIGH, found medium vulnerabilities: $FOUND_MEDIUM.
+            if [ <<parameters.high_vul_to_fail>> -ne 0 -a "$FOUND_HIGH" -ge <<parameters.high_vul_to_fail>> ]; then
+              echo Fail due to high vulnerabilities found meets the criteria.
+              exit 1
+            elif [ <<parameters.medium_vul_to_fail>> -ne 0 -a "$FOUND_MEDIUM" -ge <<parameters.medium_vul_to_fail>> ]; then
+              echo Fail due to medium vulnerabilities found meets the criteria.
+              exit 1
+            else
+              echo Pass the criteria check.
+            fi
+jobs:
+  scan-image:
+    executor: default
+    parameters:
+      controller_ip:
+        description: The IP address of the Controller or Allinone host or service external ip
+        type: string
+        default: $controller_ip
+      controller_port:
+        description: The port for REST API
+        type: string
+        default: $controller_port
+      controller_username:
+        description: Username for a NeuVector admin
+        type: string
+        default: $controller_username
+      controller_password:
+        description: Password for a NeuVector admin
+        type: string
+        default: $controller_password
+      registry_url:
+        description: The registry URL full path
+        type: string
+      registry_username:
+        description: The registry Username
+        type: string
+        default: ''
+      registry_password:
+        description: The registry password
+        type: string
+        default: ''
+      repository:
+        description: The repository to scan
+        type: string
+      tag:
+        description: Tag of the repository to scan
+        type: string
+      scan_layers:
+        description: Scan layer
+        type: boolean
+        default: false
+      high_vul_to_fail:
+        description: Minimum number of high vulnerabilities to fail the build
+        type: integer
+        default: 0
+      medium_vul_to_fail:
+        description: Minimum number of medium vulnerabilities to fail the build
+        type: integer
+        default: 0
+    steps:
+      - scan:
+          registry_url: <<parameters.registry_url>>
+          repository: <<parameters.repository>>
+          tag: <<parameters.tag>>
+          scan_layers: <<parameters.scan_layers>>
+      - report
+      - checkpoint:
+          high_vul_to_fail: <<parameters.high_vul_to_fail>>
+          medium_vul_to_fail: <<parameters.medium_vul_to_fail>>
+      - store_artifacts:
+          path: nvreport
