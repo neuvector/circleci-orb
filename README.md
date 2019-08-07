@@ -1,8 +1,9 @@
 # NeuVector Orb for CircleCI
+**CircleCI Orb Registry:** https://circleci.com/orbs/registry/orb/neuvector/neuvector-orb
 
 This orb provides NeuVector vulnerability scanning to your CircleCI workflows.
 
-Currently support scanning public registry images with a running NeuVector Allinone or Controller accessible by CircleCi.
+Currently supports scanning public registry images with a running NeuVector Allinone or Controller accessible by CircleCi.
 
 ## Setup:
 
