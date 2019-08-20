@@ -1,6 +1,7 @@
 version: 2.1
 description: |
   This orb is for NeuVector vulnerability scanning.
+  Repo: https://github.com/neuvector/circleci-orb
 examples:
   image-scan:
     description: Scan a image
