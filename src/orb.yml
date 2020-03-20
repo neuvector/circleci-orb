@@ -1,13 +1,16 @@
 version: 2.1
 description: |
   This orb is for NeuVector vulnerability scanning.
+display:
+  home_url: https://neuvector.com/
+  source_url: https://github.com/neuvector/circleci-orb/
 examples:
   image-scan:
     description: Scan a image
     usage:
       version: 2.1
       orbs:
-        neuvector: neuvector/neuvector-orb@1.0.0
+        neuvector: neuvector/neuvector-orb@x.y
       workflows:
         scan-image:
           jobs:
