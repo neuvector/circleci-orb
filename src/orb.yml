@@ -10,7 +10,7 @@ examples:
     usage:
       version: 2.1
       orbs:
-        neuvector: neuvector/neuvector-orb@x.y
+        neuvector: neuvector/neuvector-orb@2.1
       workflows:
         scan-image:
           jobs:
