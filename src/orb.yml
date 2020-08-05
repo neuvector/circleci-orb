@@ -70,26 +70,6 @@ commands:
         description: metadata source
         type: string
         default: ''
-      md_user:
-        description: metadata user
-        type: string
-        default: ''
-      md_job:
-        description: metadata job
-        type: string
-        default: ''
-      md_workspace:
-        description: metadata workspace
-        type: string
-        default: ''
-      md_function:
-        description: metadata function
-        type: string
-        default: ''
-      md_region:
-        description: metadata region
-        type: string
-        default: ''
     steps:
       - run:
           name: Scan Image
@@ -107,10 +87,10 @@ commands:
               echo Failed to get token. Http status code: $HTTP_STATUS.
               exit 1
             fi
-            curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": { "metadata":{"source": "'<<parameters.md_source>>'", "user": "'<<parameters.md_user>>'", "job": "'<<parameters.md_job>>'", "workspace": "'<<parameters.md_workspace>>'", "function": "'<<parameters.md_function>>'", "region": "'<<parameters.md_region>>'"}, "registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
+            curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": { "metadata":{"source": "'<<parameters.md_source>>'", "user": "${CIRCLE_PROJECT_USERNAME}", "job": "${CIRCLE_PROJECT_REPONAME} #'<<pipeline.number>>'", "workspace": "${CIRCLE_WORKING_DIRECTORY}"}, "registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
             HTTP_STATUS=$(cat ./nvtemp/scanResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
             while [ "$HTTP_STATUS" == "304" ]; do
-              curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": { "metadata":{"source": "'<<parameters.md_source>>'", "user": "'<<parameters.md_user>>'", "job": "'<<parameters.md_job>>'", "workspace": "'<<parameters.md_workspace>>'", "function": "'<<parameters.md_function>>'", "region": "'<<parameters.md_region>>'"}, "registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
+              curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": { "metadata":{"source": "'<<parameters.md_source>>'", "user": "${CIRCLE_PROJECT_USERNAME}", "job": "${CIRCLE_PROJECT_REPONAME} #'<<pipeline.number>>'", "workspace": "${CIRCLE_WORKING_DIRECTORY}"}, "registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
               HTTP_STATUS=$(cat ./nvtemp/scanResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
             done
             if [ "$HTTP_STATUS" == "200" ]; then
@@ -219,27 +199,7 @@ jobs:
       md_source:
         description: metadata source
         type: string
-        default: ''
-      md_user:
-        description: metadata user
-        type: string
-        default: ''
-      md_job:
-        description: metadata job
-        type: string
-        default: ''
-      md_workspace:
-        description: metadata workspace
-        type: string
-        default: ''
-      md_function:
-        description: metadata function
-        type: string
-        default: ''
-      md_region:
-        description: metadata region
-        type: string
-        default: ''
+        default: "CircleCI"
     steps:
       - scan:
           registry_url: <<parameters.registry_url>>
@@ -249,11 +209,6 @@ jobs:
           tag: <<parameters.tag>>
           scan_layers: <<parameters.scan_layers>>
           md_source: <<parameters.md_source>>
-          md_user: <<parameters.md_user>>
-          md_job: <<parameters.md_job>>
-          md_workspace: <<parameters.md_workspace>>
-          md_function: <<parameters.md_function>>
-          md_region: <<parameters.md_region>>
       - report
       - checkpoint:
           high_vul_to_fail: <<parameters.high_vul_to_fail>>
