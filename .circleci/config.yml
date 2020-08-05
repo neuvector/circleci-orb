@@ -7,8 +7,8 @@ workflows:
       - neuvector/scan-image:
           context: myContext
           registry_url: https://registry.hub.docker.com
-          repository: alpine
-          tag: "3.4"
+          repository: library/alpine
+          tag: "3.12.0"
           scan_layers: false
           high_vul_to_fail: 0
           medium_vul_to_fail: 3
