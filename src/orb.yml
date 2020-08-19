@@ -11,7 +11,40 @@ examples:
       version: 2.1
       orbs:
         neuvector: neuvector/neuvector-orb@2.1
+      jobs:
+        build_image:
+          docker:
+            - image: docker:stable-git
+          steps:
+            - setup_remote_docker
+            - checkout
+            - run:
+                name: build container
+                command: |
+                  docker build -t ${CIRCLE_PROJECT_REPONAME}:ci .
+            - run:
+                name: Save Docker image
+                command: |
+                  rm -rf /home/circleci/project/neuvector/
+                  mkdir /home/circleci/project/neuvector/ -p
+                  docker save -o /home/circleci/project/neuvector/${CIRCLE_PROJECT_REPONAME}-ci.tar ${CIRCLE_PROJECT_REPONAME}:ci
+            - persist_to_workspace:
+                root: /home/circleci/project/neuvector/
+                paths:
+                  - ./
       workflows:
+        scan-local_image:
+          jobs:
+            - build_image
+            - neuvector/scan-image:
+                requires:
+                  - build_image
+                context: myContext
+                local: true
+                file: "${CIRCLE_PROJECT_REPONAME}-ci.tar"
+                scan_layers: false
+                high_vul_to_fail: 10
+                medium_vul_to_fail: 30
         scan-image:
           jobs:
             - neuvector/scan-image:
@@ -26,6 +59,60 @@ executors:
   default:
     machine: true
 commands:
+  load_image:
+    description: load image
+    parameters:
+      file:
+        description: tar file saved from docker running container
+        type: string
+      path:
+        description: path to save the tar file
+        type: string
+    steps:
+      - run:
+          name: load docker image from tar file
+          command: |
+            docker load -i <<parameters.path>><<parameters.file>>
+  docker_login:
+    description: docker login
+    parameters:
+      username:
+        description: docker login user
+        type: string
+      password:
+        description: docker login password
+        type: string
+    steps:
+      - run:
+          name: docker login
+          command: |
+            echo "<<parameters.password>>" | docker login --username "<<parameters.username>>" --password-stdin
+  run_scanner:
+    description: run the Scanner container
+    parameters:
+      host_ip:
+        description: The IP address hosting Neuvector Controller and Scanner
+        type: string
+      scanner_port:
+        description: The port to call scanner API
+        type: string
+        default: "10443"
+      controller_image:
+        description: The Neuvector Controller image
+        type: string
+        default: <<parameters.nv_controller_image>>
+      scanner_image:
+        description: The Neuvector Scanner image
+        type: string
+        default: <<parameters.nv_scanner_image>>
+    steps:
+      - run:
+          name: Run Neuvector Scanner
+          command: |
+            docker run -itd --privileged --name neuvector.controller -e CTRL_PATH_DEBUG=1 -e CLUSTER_JOIN_ADDR=<<parameters.host_ip>> -p 18301:18301 -p 18301:18301/udp -p 18300:18300 -p 18400:18400 -p <<parameters.scanner_port>>:<<parameters.scanner_port>> -v /var/neuvector:/var/neuvector -v /var/run/docker.sock:/var/run/docker.sock:ro -v /proc:/host/proc:ro -v /sys/fs/cgroup/:/host/cgroup/:ro '<<parameters.controller_image>>'
+            sleep 10
+            docker run -td --name neuvector.scanner -e CLUSTER_JOIN_ADDR=<<parameters.host_ip>> -p 18402:18402 -v /var/run/docker.sock:/var/run/docker.sock:ro '<<parameters.scanner_image>>'
+            sleep 10
   scan:
     description: Scan the container image
     parameters:
@@ -48,6 +135,7 @@ commands:
       registry_url:
         description: The registry URL full path
         type: string
+        default: ''
       registry_username:
         description: The registry Username
         type: string
@@ -87,6 +175,22 @@ commands:
               echo Failed to get token. Http status code: $HTTP_STATUS.
               exit 1
             fi
+
+            curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/scanner" > ./nvtemp/scannerResponse
+            _status_=$(cat ./nvtemp/scannerResponse | sed -e 's/HTTPSTATUS\:.*//g' | jq .scanners[])
+            _counter_="0"
+            while [ -z "$_status_" -a "$_counter_" != "20" ]; do
+              _counter_=$((( _counter_ + 1 )))
+              sleep 5
+              curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/scanner" > ./nvtemp/scannerResponse
+              _status_=$(cat ./nvtemp/scannerResponse | sed -e 's/HTTPSTATUS\:.*//g' | jq .scanners[])
+            done
+
+            if [ $_counter_ = "20" ]; then
+              echo Neuvector Scanner is not available.
+              exit 1
+            fi
+
             curl --silent --write-out "HTTPSTATUS:%{http_code}" -k -H "Content-Type: application/json" -H "X-Auth-Token: `cat ./nvtemp/token.json | jq -r '.token.token'`" -d '{"request": { "metadata":{"source": "'<<parameters.md_source>>'", "user": "${CIRCLE_PROJECT_USERNAME}", "job": "${CIRCLE_PROJECT_REPONAME} #'<<pipeline.number>>'", "workspace": "${CIRCLE_WORKING_DIRECTORY}"}, "registry": "'<<parameters.registry_url>>'", "username": "'<<parameters.registry_username>>'", "password": "'<<parameters.registry_password>>'", "repository": "'<<parameters.repository>>'", "tag": "'<<parameters.tag>>'", "scan_layers": <<parameters.scan_layers>>}}' "https://<<parameters.controller_ip>>:<<parameters.controller_port>>/v1/scan/repository" > ./nvtemp/scanResponse
             HTTP_STATUS=$(cat ./nvtemp/scanResponse | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
             while [ "$HTTP_STATUS" == "304" ]; do
@@ -151,6 +255,30 @@ jobs:
   scan-image:
     executor: default
     parameters:
+      local:
+        description: Scan a local image
+        type: boolean
+        default: false
+      file:
+        description: tar file saved from docker running container
+        type: string
+        default: "${CIRCLE_PROJECT_REPONAME}-ci.tar"
+      path:
+        description: path to save the tar file
+        type: string
+        default: "/home/circleci/project/neuvector/"
+      nv_controller_image:
+        description: The Neuvector Controller image
+        type: string
+        default: "nvpublic/co"
+      nv_scanner_image:
+        description: The Neuvector Scanner image
+        type: string
+        default: "nvpublic/up:jenkins-nv-build-scanner-1007"
+      nv_license:
+        description: The Neuvector license
+        type: string
+        default: $nv_license
       controller_ip:
         description: The IP address of the Controller or Allinone host or service external ip
         type: string
@@ -170,6 +298,7 @@ jobs:
       registry_url:
         description: The registry URL full path
         type: string
+        default: ''
       registry_username:
         description: The registry Username
         type: string
@@ -181,9 +310,11 @@ jobs:
       repository:
         description: The repository to scan
         type: string
+        default: ''
       tag:
         description: Tag of the repository to scan
         type: string
+        default: ''
       scan_layers:
         description: Scan layer
         type: boolean
@@ -201,14 +332,42 @@ jobs:
         type: string
         default: "CircleCI"
     steps:
-      - scan:
-          registry_url: <<parameters.registry_url>>
-          repository: <<parameters.repository>>
-          registry_username: <<parameters.registry_username>>
-          registry_password: <<parameters.registry_password>>
-          tag: <<parameters.tag>>
-          scan_layers: <<parameters.scan_layers>>
-          md_source: <<parameters.md_source>>
+      - when:
+          condition: <<parameters.local>>
+          steps:
+            - attach_workspace:
+                at: <<parameters.path>>
+            - docker_login:
+                username: ${NV_DOCKER_USER}
+                password: ${NV_DOCKER_PASSWORD}
+            - run:
+                name: get host ip address
+                command: echo "export HOST_IP=$(hostname -I|awk '{print $1}')" >> $BASH_ENV
+            - load_image:
+                file: <<parameters.file>>
+                path: <<parameters.path>>
+            - run_scanner:
+                host_ip: ${HOST_IP}
+                controller_image: <<parameters.nv_controller_image>>
+                scanner_image: <<parameters.nv_scanner_image>>
+            - scan:
+                controller_ip: ${HOST_IP}
+                controller_port: "10443"
+                repository: ${CIRCLE_PROJECT_REPONAME}
+                tag: "ci"
+                scan_layers: <<parameters.scan_layers>>
+                md_source: <<parameters.md_source>>
+      - unless:
+          condition: <<parameters.local>>
+          steps:
+            - scan:
+                registry_url: <<parameters.registry_url>>
+                repository: <<parameters.repository>>
+                registry_username: <<parameters.registry_username>>
+                registry_password: <<parameters.registry_password>>
+                tag: <<parameters.tag>>
+                scan_layers: <<parameters.scan_layers>>
+                md_source: <<parameters.md_source>>
       - report
       - checkpoint:
           high_vul_to_fail: <<parameters.high_vul_to_fail>>
