@@ -1,6 +1,6 @@
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@1.0.1
 workflows:
   scan-image:
     jobs:
