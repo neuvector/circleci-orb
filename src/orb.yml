@@ -10,7 +10,29 @@ examples:
     usage:
       version: 2.1
       orbs:
-        neuvector: neuvector/neuvector-orb@2.1
+        neuvector: neuvector/neuvector-orb@1.0.2
+      jobs:
+        build_image:
+          docker:
+            - image: docker:stable-git
+          steps:
+            - setup_remote_docker
+            - checkout
+            - run:
+                name: build container
+                command: |
+                  docker pull alpine:3.2
+                  docker tag alpine:3.2 ${CIRCLE_PROJECT_REPONAME}:ci
+            - run:
+                name: Save Docker image
+                command: |
+                  rm -rf /tmp/neuvector/
+                  mkdir /tmp/neuvector/ -p
+                  docker save -o /tmp/neuvector/${CIRCLE_PROJECT_REPONAME}-ci.tar ${CIRCLE_PROJECT_REPONAME}:ci
+            - persist_to_workspace:
+                root: /tmp/neuvector/
+                paths:
+                  - ./
       workflows:
         scan-image:
           jobs:
@@ -63,15 +85,9 @@ commands:
           name: Load the to-be-scanned image from the attached tar archive file
           command: |
             docker load -i <<parameters.path>><<parameters.file>>
-  run_scanner:
+  scan_on_dynamic:
     description: run NeuVector Scanner
     parameters:
-      host_ip:
-        description: The ip that NeuVector Scanner runs at
-        type: string
-      scanner_port:
-        description: The port that NeuVector Scanner gets accessed
-        type: string
       registry:
         description: The registry to pull NeuVector Scanner
         type: string
@@ -81,43 +97,26 @@ commands:
       password:
         description: The registry's login password
         type: string
-      controller_image:
-        description: Neuvector Controller image
-        type: string
       scanner_image:
         description: Neuvector Scanner image
         type: string
-      controller_username:
-        description: Username to sign in NeuVector Scanner
-        type: string
-      controller_password:
-        description: Password to sign in NeuVector Scanner
-        type: string
       nv_license:
         description: License for NeuVector Scanner
+        type: string
+      repository:
+        description: The repository to scan
+        type: string
+      tag:
+        description: Tag of the repository to scan
         type: string
     steps:
       - run:
           name: Start up Neuvector Scanner
           command: |
             echo "<<parameters.password>>" | docker login --username "<<parameters.username>>" <<parameters.registry>> --password-stdin
-            docker run -itd --privileged --name neuvector.controller -e CTRL_PATH_DEBUG=1 -e CLUSTER_JOIN_ADDR=<<parameters.host_ip>> -p 18301:18301 -p 18301:18301/udp -p 18300:18300 -p 18400:18400 -p <<parameters.scanner_port>>:<<parameters.scanner_port>> -v /var/neuvector:/var/neuvector -v /var/run/docker.sock:/var/run/docker.sock:ro -v /proc:/host/proc:ro -v /sys/fs/cgroup/:/host/cgroup/:ro '<<parameters.controller_image>>'
-            _counter_="0"
-            while [ -z "$_token_" -a "$_counter_" != "12" ];do
-              _counter_=$((( _counter_ + 1 )))
-              sleep 5
-              _token_=`(curl -ks -H "Content-Type: application/json" -d '{"password": {"username": "'<<parameters.controller_username>>'", "password": "'<<parameters.controller_password>>'"}}' "https://<<parameters.host_ip>>:<<parameters.scanner_port>>/v1/auth" || echo null) | jq -r '.token.token'`
-              if [ "$_token_" = "null" ]; then
-                _token_=""
-              fi
-            done
-            if [ $_counter_ = "12" ]; then
-              echo Neuvector Controller is not running.
-              exit 1
-            fi
-            curl --write-out "\nHTTPSTATUS:%{http_code}\n" -ks -H "Content-Type:application/json" -H "X-Auth-Token:$_token_" -d '{"license_key":"'<<parameters.nv_license>>'"}' "https://<<parameters.host_ip>>:<<parameters.scanner_port>>/v1/system/license/update"
-            docker run -td --name neuvector.scanner -e CLUSTER_JOIN_ADDR=<<parameters.host_ip>> -p 18402:18402 -v /var/run/docker.sock:/var/run/docker.sock:ro '<<parameters.scanner_image>>'
-            curl -ks "https://<<parameters.host_ip>>:<<parameters.scanner_port>>/v1/auth" -X 'DELETE' -H "Content-Type:application/json" -H "X-Auth-Token:$_token_" > /dev/null
+            docker run --name neuvector.scanner --rm -e SCANNER_REPOSITORY=<<parameters.repository>> -e SCANNER_TAG=<<parameters.tag>> -e SCANNER_LICENSE=<<parameters.nv_license>> -v /var/run/docker.sock:/var/run/docker.sock -v /var/neuvector:/var/neuvector '<<parameters.scanner_image>>'
+            mkdir nvreport
+            cp /var/neuvector/scan_result.json ./nvreport/scan_repository.json
   scan:
     description: Scan image
     parameters:
@@ -293,14 +292,10 @@ jobs:
         description: Login password pull NeuVector Scanner Images
         type: string
         default: ${nv_registry_password}
-      nv_controller_image:
-        description: The Neuvector Controller image
-        type: string
-        default: "neu123456/controller:ci"
       nv_scanner_image:
         description: The Neuvector Scanner image
         type: string
-        default: "neu123456/scanner:ci"
+        default: "nvpublic/up:jenkins-nv-build-scanner-1103"
       nv_license:
         description: The Neuvector license
         type: string
@@ -363,30 +358,17 @@ jobs:
           steps:
             - attach_workspace:
                 at: <<parameters.path>>
-            - run:
-                name: Get the host ip
-                command: echo "export HOST_IP=$(hostname -I|awk '{print $1}')" >> $BASH_ENV
             - load_image:
                 file: <<parameters.file>>
                 path: <<parameters.path>>
-            - run_scanner:
+            - scan_on_dynamic:
                 registry: <<parameters.nv_registry_url>>
                 username: <<parameters.nv_registry_username>>
                 password: <<parameters.nv_registry_password>>
-                host_ip: ${HOST_IP}
-                scanner_port: "10443"
-                controller_image: <<parameters.nv_controller_image>>
                 scanner_image: <<parameters.nv_scanner_image>>
-                controller_username: <<parameters.controller_username>>
-                controller_password: <<parameters.controller_password>>
                 nv_license: <<parameters.nv_license>>
-            - scan:
-                controller_ip: ${HOST_IP}
-                controller_port: "10443"
                 repository: <<parameters.image_name>>
                 tag: <<parameters.image_tag>>
-                scan_layers: <<parameters.scan_layers>>
-                md_source: <<parameters.md_source>>
       - unless:
           condition: <<parameters.local>>
           steps:

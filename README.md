@@ -37,7 +37,7 @@ It will fail if the number of high or medium vulnerability found in your image e
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@1.0.2
 workflows:
   scan-image:
     jobs:
@@ -69,7 +69,7 @@ It will fail if the number of high or medium vulnerability found in your image e
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@1.0.2
 workflows:
   scan-image:
     jobs:
@@ -100,7 +100,7 @@ The image_tag is the tag name of the image to be scanned
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@1.0.2
 workflows:
   scan-image:
     jobs:
@@ -132,7 +132,8 @@ jobs:
       - run:
           name: build container
           command: |
-            docker build -t ${CIRCLE_PROJECT_REPONAME}:ci .
+            docker pull alpine:3.12
+            docker tag alpine:3.12 ${CIRCLE_PROJECT_REPONAME}:ci
       - run:
           name: Save Docker image
           command: |
@@ -150,7 +151,7 @@ If you run the build job with these default values, you can run neuvector/scan-i
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.0
+  neuvector: neuvector/neuvector-orb@1.0.2
 workflows:
   scan-image:
     jobs:
