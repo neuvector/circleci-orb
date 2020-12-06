@@ -22,13 +22,12 @@ examples:
                 name: build container
                 command: |
                   docker pull alpine:3.2
-                  docker tag alpine:3.2 ${CIRCLE_PROJECT_REPONAME}:ci
             - run:
                 name: Save Docker image
                 command: |
                   rm -rf /tmp/neuvector/
                   mkdir /tmp/neuvector/ -p
-                  docker save -o /tmp/neuvector/${CIRCLE_PROJECT_REPONAME}-ci.tar ${CIRCLE_PROJECT_REPONAME}:ci
+                  docker save -o /tmp/neuvector/alpine-3.2.tar alpine:3.2
             - persist_to_workspace:
                 root: /tmp/neuvector/
                 paths:
@@ -63,7 +62,11 @@ examples:
                 requires:
                   - build_image
                 context: myContext
-                local: true
+                scan_local_image: true
+                image_name: alpine
+                image_tag: "3.2"
+                path: "/tmp/neuvector/"
+                image_tar_file: /tmp/neuvector/alpine-3.2.tar
                 scan_layers: false
                 high_vul_to_fail: 0
                 medium_vul_to_fail: 3
@@ -74,17 +77,17 @@ commands:
   load_image:
     description: Load image
     parameters:
-      file:
-        description: a tar archive file storing image and tag
+      image_tar_file:
+        description: The tar archive file that stores the to-be-scan image
         type: string
       path:
-        description: the absolute path storing the tar archive file
+        description: The absolute path to store the tar archive file
         type: string
     steps:
       - run:
-          name: Load the to-be-scanned image from the attached tar archive file
+          name: Load the to-be-scan image from the attached tar archive file
           command: |
-            docker load -i <<parameters.path>><<parameters.file>>
+            docker load -i <<parameters.path>><<parameters.image_tar_file>>
   scan_on_dynamic:
     description: run NeuVector Scanner
     parameters:
@@ -260,42 +263,38 @@ jobs:
   scan-image:
     executor: default
     parameters:
-      local:
-        description: Scan a local image
+      scan_local_image:
+        description: To scan the image on the same host
         type: boolean
         default: false
-      file:
-        description: Tar file saved from docker running container
+      image_tar_file:
+        description: Tar file exported from docker running container
         type: string
-        default: "${CIRCLE_PROJECT_REPONAME}-ci.tar"
       path:
-        description: path to save the tar file
+        description: The absolute path to store the tar file
         type: string
-        default: "/tmp/neuvector/"
       image_name:
         description: Name of the image to be scanned
         type: string
-        default: ${CIRCLE_PROJECT_REPONAME}
       image_tag:
         description: Tag of the image to be scanned
         type: string
-        default: "ci"
       nv_registry_url:
-        description: Registry URL to pull NeuVector Scanner Images
+        description: Registry URL to pull NeuVector Scanner Image
         type: string
         default: ${nv_registry_url}
       nv_registry_username:
-        description: Login user to pull NeuVector Scanner Images
+        description: Login user to pull NeuVector Scanner Image
         type: string
         default: ${nv_registry_username}
       nv_registry_password:
-        description: Login password pull NeuVector Scanner Images
+        description: Login password pull NeuVector Scanner Image
         type: string
         default: ${nv_registry_password}
       nv_scanner_image:
         description: The Neuvector Scanner image
         type: string
-        default: "nvpublic/up:jenkins-nv-build-scanner-1103"
+        default: "neuvector/scanner:latest"
       nv_license:
         description: The Neuvector license
         type: string
@@ -354,12 +353,12 @@ jobs:
         default: "CircleCI"
     steps:
       - when:
-          condition: <<parameters.local>>
+          condition: <<parameters.scan_local_image>>
           steps:
             - attach_workspace:
                 at: <<parameters.path>>
             - load_image:
-                file: <<parameters.file>>
+                image_tar_file: <<parameters.image_tar_file>>
                 path: <<parameters.path>>
             - scan_on_dynamic:
                 registry: <<parameters.nv_registry_url>>
@@ -370,7 +369,7 @@ jobs:
                 repository: <<parameters.image_name>>
                 tag: <<parameters.image_tag>>
       - unless:
-          condition: <<parameters.local>>
+          condition: <<parameters.scan_local_image>>
           steps:
             - scan:
                 registry_url: <<parameters.registry_url>>

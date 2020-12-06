@@ -87,15 +87,15 @@ workflows:
 
 ####c. Scan an image from a CircleCI build job
 
-The local boolean parameter is an indicator to run a local scan. set it to be true
+The boolean parameter scan_local_image is an indicator to scan the image on the same host. Set it to be true
 
-The file is the tar archive storing the to-be-scanned image
+The image_tar_file is the tar archive that stores the to-be-scanned image
 
-The path is the director storing the tar archive file
+The path is the absolute path to save the tar archive file
 
-The image_name is the name of the image to be scanned
+The image_name is the name of to-be-scanned image
 
-The image_tag is the tag name of the image to be scanned
+The image_tag is the tag name to-be-scanned image
 
 ```
 version: 2.1
@@ -109,11 +109,11 @@ workflows:
           requires:
             - build_image
           context: myContext
-          local: true
-          file: ${CIRCLE_PROJECT_REPONAME}-ci.tar
+          scan_local_image: true
+          image_tar_file: alpine-3.2.tar
           path: /tmp/neuvector/
-          image_name: ${CIRCLE_PROJECT_REPONAME}
-          image_tag: ci
+          image_name: alpine
+          image_tag: "3.2"
           scan_layers: false
           high_vul_to_fail: 0
           medium_vul_to_fail: 3
@@ -133,20 +133,19 @@ jobs:
           name: build container
           command: |
             docker pull alpine:3.12
-            docker tag alpine:3.12 ${CIRCLE_PROJECT_REPONAME}:ci
       - run:
           name: Save Docker image
           command: |
             rm -rf /tmp/neuvector/
             mkdir /tmp/neuvector/ -p
-            docker save -o /tmp/neuvector/${CIRCLE_PROJECT_REPONAME}-ci.tar ${CIRCLE_PROJECT_REPONAME}:ci
+            docker save -o /tmp/neuvector/alpine-3.12.tar alpine:3.2
       - persist_to_workspace:
           root: /tmp/neuvector/
           paths:
             - ./
 ```
 
-If you run the build job with these default values, you can run neuvector/scan-image job in a simple version
+If you run the build job with default values, you can run neuvector/scan-image job in a simple version
 
 ```
 version: 2.1
@@ -160,7 +159,11 @@ workflows:
           requires:
             - build_image
           context: myContext
-          local: true
+          scan_local_image: true
+          image_name: alpine
+          image_tag: "3.2"
+          path: "/tmp/neuvector/"
+          image_tar_file: "alpine-3.2.tar"
           scan_layers: false
           high_vul_to_fail: 0
           medium_vul_to_fail: 3
