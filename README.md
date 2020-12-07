@@ -146,12 +146,12 @@ jobs:
             - ./
 ```
 
-## Result:
+## Sample Results:
 
-### 1. Pass the criteria you set
+### 1. Passes the criteria configured
 
 ![Pass criteria](images/pass.png?raw=true)
 
-### 2. Fail the criteria you set
+### 2. Fails the criteria configured
 
 ![Fail criteria](images/fail.png?raw=true)
