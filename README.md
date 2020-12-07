@@ -3,7 +3,7 @@
 
 This orb provides NeuVector vulnerability scanning to your CircleCI workflows.
 
-It can scan registry and image with NeuVector Scanner.
+NeuVector supports scanning images locally and/or from a registry.
 
 ## Setup:
 
@@ -20,17 +20,18 @@ It can scan registry and image with NeuVector Scanner.
 ```
 orbs:
   neuvector: neuvector/neuvector-orb@x.y.z
+(Where x.y.z is the current orb versio)
 ```
 
 Add neuvector/scan-image with parameters to your current workflow.
 
 Usage examples:
 
-####a. Scan an image from a public registry
+#### a. Scan an image from a public registry
 
-The registry_url is the public registry the image stored at.
+The registry_url is the public registry where the image is stored.
 
-Set up your vulnerability criteria to fail the build. 
+(Optional) Set up your vulnerability criteria to fail the build. 
 
 It will fail if the number of high or medium vulnerability found in your image exceeds the criteria.
 
@@ -51,7 +52,7 @@ workflows:
           medium_vul_to_fail: 3
 ```
 
-####b. Scan an image from a private registry
+#### b. Scan an image from a private registry
 
 Add variables "registry_username" and "registry_password" to the project
 ![Set env](images/env2.png?raw=true)
@@ -62,7 +63,7 @@ The registry_username is the login user of your private registry.
 
 The registry_password is the login password of your private registry.
 
-Set up your vulnerability criteria to fail the build. 
+(Optional) Set up your vulnerability criteria to fail the build. 
 
 It will fail if the number of high or medium vulnerability found in your image exceeds the criteria.
 
@@ -85,17 +86,17 @@ workflows:
           medium_vul_to_fail: 3
 ```
 
-####c. Scan an image from a CircleCI build job
+#### c. Scan an image from a CircleCI build job
 
-The boolean parameter scan_local_image is an indicator to scan the image on the same host. Set it to be true
+The boolean parameter scan_local_image is an indicator to scan the image on the same host. Set it to true.
 
-The image_tar_file is the tar archive that stores the to-be-scanned image
+The image_tar_file is the tar archive where the image to be scanned is stored.
 
-The path is the absolute path to save the tar archive file
+The path is the directory where the tar archive file is stored.
 
-The image_name is the name of to-be-scanned image
+The image_name is the name of the image to be scanned.
 
-The image_tag is the tag name to-be-scanned image
+The image_tag is the tag name of the image to be scanned.
 
 ```
 version: 2.1
@@ -119,7 +120,7 @@ workflows:
           medium_vul_to_fail: 3
 ```
 
-Here is a sample build job
+Here is a sample build job to scan the image alpine:3.12
 
 ```
 jobs:
@@ -143,30 +144,6 @@ jobs:
           root: /tmp/neuvector/
           paths:
             - ./
-```
-
-If you run the build job with default values, you can run neuvector/scan-image job in a simple version
-
-```
-version: 2.1
-orbs:
-  neuvector: neuvector/neuvector-orb@1.0.2
-workflows:
-  scan-image:
-    jobs:
-      - build_image
-      - neuvector/scan-image:
-          requires:
-            - build_image
-          context: myContext
-          scan_local_image: true
-          image_name: alpine
-          image_tag: "3.2"
-          path: "/tmp/neuvector/"
-          image_tar_file: "alpine-3.2.tar"
-          scan_layers: false
-          high_vul_to_fail: 0
-          medium_vul_to_fail: 3
 ```
 
 ## Result:
