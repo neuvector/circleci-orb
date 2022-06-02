@@ -3,7 +3,7 @@
 
 This orb provides NeuVector vulnerability scanning to your CircleCI workflows.
 
-NeuVector supports scanning images locally and/or from a registry.
+NeuVector supports the local image scan and the registry scan.
 
 ## Setup:
 
@@ -11,7 +11,7 @@ NeuVector supports scanning images locally and/or from a registry.
 
 ![Set context](images/context.png?raw=true)
 
-### 2. Add environment variables `controller_ip`, `controller_port`, `controller_username`, `controller_password`, `nv_license`, `nv_registry_username`, `nv_registry_password` to the context.
+### 2. Add environment variables `controller_ip`, `controller_port`, `controller_username`, `controller_password`, `nv_registry_username`, `nv_registry_password` to the context.
 
 ![Set env](images/env.png?raw=true)
 
@@ -20,25 +20,23 @@ NeuVector supports scanning images locally and/or from a registry.
 ```
 orbs:
   neuvector: neuvector/neuvector-orb@x.y.z
-(Where x.y.z is the current orb versio)
+  (x.y.z is the orb version number.)
 ```
 
-Add neuvector/scan-image with parameters to your current workflow.
+Add the job "neuvector/scan-image" to the circleCI workflow.
 
 Usage examples:
 
-#### a. Scan an image from a public registry
+#### a. Scan the image at a public registry
 
-The registry_url is the public registry where the image is stored.
+The registry_url is url of the public registry.
 
-(Optional) Set up your vulnerability criteria to fail the build. 
-
-It will fail if the number of high or medium vulnerability found in your image exceeds the criteria.
+The job "neuvector/scan-image" will fail when the number of high or medium vulnerability found in your image exceeds the criteria.
 
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.2
+  neuvector: neuvector/neuvector-orb@1.1.0
 workflows:
   scan-image:
     jobs:
@@ -52,25 +50,23 @@ workflows:
           medium_vul_to_fail: 3
 ```
 
-#### b. Scan an image from a private registry
+#### b. Scan the image at the private registry
 
 Add variables "registry_username" and "registry_password" to the project
 ![Set env](images/env2.png?raw=true)
 
-The registry_url is your private registry. 
+The registry_url is the url of the private registry.
 
-The registry_username is the login user of your private registry. 
+The registry_username is the login user of your private registry.
 
 The registry_password is the login password of your private registry.
 
-(Optional) Set up your vulnerability criteria to fail the build. 
-
-It will fail if the number of high or medium vulnerability found in your image exceeds the criteria.
+The job "neuvector/scan-image" will fail when the number of high or medium vulnerability found in your image exceeds the criteria.
 
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.2
+  neuvector: neuvector/neuvector-orb@1.1.0
 workflows:
   scan-image:
     jobs:
@@ -86,22 +82,22 @@ workflows:
           medium_vul_to_fail: 3
 ```
 
-#### c. Scan an image from a CircleCI build job
+#### c. Scan the local image built in the CircleCI job "build_image"
 
-The boolean parameter scan_local_image is an indicator to scan the image on the same host. Set it to true.
+To scan the image on the same host, you need to set scan_local_image as true.
 
-The image_tar_file is the tar archive where the image to be scanned is stored.
+The image needs to be saved as a tar archive file and set the image_tar_file.
 
 The path is the directory where the tar archive file is stored.
 
-The image_name is the name of the image to be scanned.
+The image_name is the name of the to-be-scanned image.
 
-The image_tag is the tag name of the image to be scanned.
+The image_tag is the tag of the to-be-scanned image.
 
 ```
 version: 2.1
 orbs:
-  neuvector: neuvector/neuvector-orb@1.0.2
+  neuvector: neuvector/neuvector-orb@1.1.0
 workflows:
   scan-image:
     jobs:
