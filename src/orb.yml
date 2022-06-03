@@ -10,7 +10,7 @@ examples:
     usage:
       version: 2.1
       orbs:
-        neuvector: neuvector/neuvector-orb@1.0.2
+        neuvector: neuvector/neuvector-orb@1.1.0
       jobs:
         build_image:
           docker:
@@ -103,9 +103,6 @@ commands:
       scanner_image:
         description: Neuvector Scanner image
         type: string
-      nv_license:
-        description: License for NeuVector Scanner
-        type: string
       repository:
         description: The repository to scan
         type: string
@@ -117,7 +114,7 @@ commands:
           name: Start up Neuvector Scanner
           command: |
             echo "<<parameters.password>>" | docker login --username "<<parameters.username>>" <<parameters.registry>> --password-stdin
-            docker run --name neuvector.scanner --rm -e SCANNER_REPOSITORY=<<parameters.repository>> -e SCANNER_TAG=<<parameters.tag>> -e SCANNER_LICENSE=<<parameters.nv_license>> -v /var/run/docker.sock:/var/run/docker.sock -v /var/neuvector:/var/neuvector '<<parameters.scanner_image>>'
+            docker run --name neuvector.scanner --rm -e SCANNER_REPOSITORY=<<parameters.repository>> -e SCANNER_TAG=<<parameters.tag>> -e SCANNER_ON_DEMAND=true -v /var/run/docker.sock:/var/run/docker.sock -v /var/neuvector:/var/neuvector '<<parameters.scanner_image>>'
             mkdir nvreport
             cp /var/neuvector/scan_result.json ./nvreport/scan_repository.json
   scan:
@@ -231,7 +228,7 @@ commands:
             echo Full report in json.
             cat ./nvreport/scan_repository.json | jq .
   checkpoint:
-    description: Pass or fail based on criteria
+    description: Check the scan result based on the criteria
     parameters:
       high_vul_to_fail:
         description: Minimum number of high vulnerabilities to fail the build
@@ -295,10 +292,6 @@ jobs:
         description: The Neuvector Scanner image
         type: string
         default: "neuvector/scanner:latest"
-      nv_license:
-        description: The Neuvector license
-        type: string
-        default: $nv_license
       controller_ip:
         description: The IP address of the Controller or Allinone host or service external ip
         type: string
@@ -365,7 +358,6 @@ jobs:
                 username: <<parameters.nv_registry_username>>
                 password: <<parameters.nv_registry_password>>
                 scanner_image: <<parameters.nv_scanner_image>>
-                nv_license: <<parameters.nv_license>>
                 repository: <<parameters.image_name>>
                 tag: <<parameters.image_tag>>
       - unless:
